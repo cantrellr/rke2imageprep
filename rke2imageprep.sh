@@ -388,9 +388,10 @@ action_image_download() {
 #=============================================================================
 
 action_image_push() {
-    # Check and install dependencies if needed
-    if ! install_dependencies; then
-        echo "Error: Required dependencies not available"
+    # Check for skopeo (skip install_dependencies to avoid internet access)
+    if ! command -v skopeo &> /dev/null; then
+        echo "Error: skopeo is required but not installed"
+        echo "Please install skopeo before running this command"
         return 1
     fi
     
@@ -486,49 +487,22 @@ action_image_push() {
     echo "=========================================="
     echo ""
     
-    # Re-fetch image list to ensure consistency with downloaded images
-    # Best Practice: Single source of truth for image manifest
-    local GITHUB_API="https://api.github.com/repos/rancher/rke2/releases/latest"
-    local CNI_GITHUB_API="https://api.github.com/repos/rancher/image-build-cni-plugins/releases/latest"
-    local TEMP_DIR=$(mktemp -d)
+    # Find all downloaded image directories in the downloads folder
+    # No internet access required - work with what's already downloaded
+    local image_dirs=()
+    while IFS= read -r -d '' dir; do
+        image_dirs+=("$dir")
+    done < <(find "$DOWNLOADS_DIR" -mindepth 1 -maxdepth 1 -type d -print0)
     
-    # Fetch RKE2 release version
-    local release_info=$(curl -s "$GITHUB_API")
-    local version=$(echo "$release_info" | grep -oP '"tag_name":\s*"\K[^"]+' | head -1)
+    local total_images=${#image_dirs[@]}
     
-    if [[ -z "$version" ]]; then
-        echo "Error: Could not determine latest RKE2 version"
-        rm -rf "$TEMP_DIR"
+    if [[ $total_images -eq 0 ]]; then
+        echo "Error: No images found in $DOWNLOADS_DIR"
+        echo "Please run --download first to download the images."
         return 1
     fi
     
-    # Download RKE2 image manifest
-    local images_url="https://github.com/rancher/rke2/releases/download/${version}/rke2-images-all.linux-amd64.txt"
-    local images_file="${TEMP_DIR}/rke2-images-all.linux-amd64.txt"
-    
-    if ! curl -sSL -o "$images_file" "$images_url"; then
-        echo "Error: Failed to download RKE2 images list"
-        rm -rf "$TEMP_DIR"
-        return 1
-    fi
-    
-    # Fetch CNI plugins version
-    local cni_release_info=$(curl -s "$CNI_GITHUB_API")
-    local cni_version=$(echo "$cni_release_info" | grep -oP '"tag_name":\s*"\K[^"]+' | head -1)
-    
-    if [[ -z "$cni_version" ]]; then
-        echo "Error: Could not determine latest CNI plugins version"
-        rm -rf "$TEMP_DIR"
-        return 1
-    fi
-    
-    # Create unified image list
-    local combined_images="${TEMP_DIR}/all-images.txt"
-    cat "$images_file" > "$combined_images"
-    echo "docker.io/rancher/hardened-cni-plugins:$cni_version" >> "$combined_images"
-    
-    local total_images=$(wc -l < "$combined_images")
-    echo "Total images to push: $total_images"
+    echo "Found $total_images downloaded image(s) to push"
     echo ""
     
     # Initialize push metrics
@@ -536,32 +510,22 @@ action_image_push() {
     local success=0
     local failed=0
     
-    # Iterate through image manifest and push each to target registry
-    while IFS= read -r image; do
+    # Iterate through downloaded images and push each to target registry
+    for source_dir in "${image_dirs[@]}"; do
         count=$((count + 1))
         
-        # Skip empty lines
-        [[ -z "$image" ]] && continue
+        # Extract image name from directory name
+        # Directory format: rancher_<image>_<tag> (transform back to image reference)
+        local dir_name=$(basename "$source_dir")
         
-        # Map source directory using same transformation as download
-        # Best Practice: Maintain naming consistency across operations
-        local image_name=$(echo "$image" | sed 's|docker.io/||' | sed 's|/|_|g' | sed 's|:|_|g')
-        local source_dir="${DOWNLOADS_DIR}/${image_name}"
+        # Reconstruct the original image path from the directory name
+        # Reverse the transformation: rancher_kube-apiserver_v1.28.0 -> rancher/kube-apiserver:v1.28.0
+        local image_path=$(echo "$dir_name" | sed 's/_/:/' | sed 's/_/\//')
         
-        # Verify image was downloaded before attempting push
-        # Best Practice: Graceful degradation - skip missing images rather than failing entire operation
-        if [[ ! -d "$source_dir" ]]; then
-            echo "[$count/$total_images] Skipping (not downloaded): $image"
-            failed=$((failed + 1))
-            continue
-        fi
+        # Construct target image reference
+        local target_image="${REGISTRY_URL}/${image_path}"
         
-        # Construct target image reference by replacing registry prefix
-        # Preserves namespace and tag structure for compatibility
-        local image_without_registry=$(echo "$image" | sed 's|^docker\.io/||')
-        local target_image="${REGISTRY_URL}/${image_without_registry}"
-        
-        echo "[$count/$total_images] Pushing: $image"
+        echo "[$count/$total_images] Pushing from: $dir_name"
         echo "  Source: $source_dir"
         echo "  Target: $target_image"
         
@@ -577,7 +541,7 @@ action_image_push() {
         fi
         
         echo ""
-    done < "$combined_images"
+    done
     
     # Display operation summary
     echo "=========================================="
@@ -588,9 +552,6 @@ action_image_push() {
     echo "Failed: $failed"
     echo "Registry: $REGISTRY_URL"
     echo "=========================================="
-    
-    # Cleanup
-    rm -rf "$TEMP_DIR"
     
     # Return success only if all operations succeeded
     return $([[ $failed -eq 0 ]] && echo 0 || echo 1)
