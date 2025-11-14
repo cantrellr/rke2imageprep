@@ -1,0 +1,98 @@
+# ==============================================================================
+# .gitignore for RKE2 Node Initialization Repository
+# ==============================================================================
+
+# CRITICAL: Sensitive files - Prevent credential leaks
+# Certificate files (except examples)
+certs/*.pem
+certs/*.key
+certs/*.crt
+!certs/examples/*.pem
+!certs/examples/*.crt
+!certs/examples/*.key
+!examples/certs/*.pem
+!examples/certs/*.crt
+!examples/certs/*.key
+/certs/*.pem
+/certs/*.key
+/certs/*.crt
+
+# Token and credential files
+*-token.txt
+*.token
+*-bootstrap-token.txt
+secrets/
+credentials/
+.env
+.env.local
+
+# Cluster configuration files (keep examples only)
+clusters/
+!clusters/examples/
+/clusters/*.yaml
+!clusters/*-example.yaml
+
+# Production configuration paths (Phase 1 Security)
+configs/production/
+configs/*.prod.yaml
+configs/*.production.yaml
+
+# Generated runtime files
+/logs/
+/outputs/
+/downloads/
+/code/
+*.log
+
+# Archives and build artifacts
+*.tar
+*.tar.gz
+*.tar.zst
+*.tgz
+*.zip
+*.sha256
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+.project
+.classpath
+.settings/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*$py.class
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+venv/
+env/
+ENV/
+.venv/
+
+# Temporary files
+*.tmp
+.temp-*
+temp/
+tmp/
+*.bak
+*.backup
+
+# Large binary files
+*.iso
+*.vmdk
+*.qcow2
+*.img
+
