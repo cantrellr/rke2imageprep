@@ -601,6 +601,7 @@ action_image_push() {
 # Description: Displays comprehensive help information and usage examples
 # Best Practice: Always provide --help for complex CLI tools
 #=============================================================================
+usage() {
     cat << EOF
 Usage: $0 [OPTIONS]
 
