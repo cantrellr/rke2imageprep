@@ -515,12 +515,24 @@ action_image_push() {
         count=$((count + 1))
         
         # Extract image name from directory name
-        # Directory format: rancher_<image>_<tag> (transform back to image reference)
+        # Directory format: namespace_image-name_tag
+        # Example: rancher_hardened-addon-resizer_1.8.23-build20250909
         local dir_name=$(basename "$source_dir")
         
-        # Reconstruct the original image path from the directory name
-        # Reverse the transformation: rancher_kube-apiserver_v1.28.0 -> rancher/kube-apiserver:v1.28.0
-        local image_path=$(echo "$dir_name" | sed 's/_/:/' | sed 's/_/\//')
+        # Split directory name by underscores to extract components
+        # First underscore separates namespace from the rest
+        local namespace=$(echo "$dir_name" | cut -d'_' -f1)
+        
+        # Last underscore separates tag from the rest
+        # Get everything after the last underscore for the tag
+        local tag=$(echo "$dir_name" | rev | cut -d'_' -f1 | rev)
+        
+        # Middle part is the image name (everything between first and last underscore)
+        # Remove namespace and tag, leaving image name with underscores converted back to the original
+        local image_name=$(echo "$dir_name" | sed "s/^${namespace}_//" | sed "s/_${tag}$//")
+        
+        # Reconstruct the original image path: namespace/image-name:tag
+        local image_path="${namespace}/${image_name}:${tag}"
         
         # Construct target image reference
         local target_image="${REGISTRY_URL}/${image_path}"
