@@ -571,7 +571,11 @@ action_image_push() {
         echo ""
         echo "Generating RKE2 registries.yaml configuration..."
         
-        local registries_file="./registries.yaml"
+        # Create outputs directory if it doesn't exist
+        local outputs_dir="./outputs"
+        mkdir -p "$outputs_dir"
+        
+        local registries_file="${outputs_dir}/registries.yaml"
         
         # Create registries.yaml with mirror configuration
         # Best Practice: Use wildcard (*) to apply registry to all image pulls
